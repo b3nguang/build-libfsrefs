@@ -1,60 +1,10 @@
-# Build and publish compiled artifacts (manual trigger only).
+# Build and publish compiled artifacts (manual trigger, Windows only).
 name: build_artifacts
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  build_linux:
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@v6
-    - name: Install build dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get -y install autoconf automake autopoint build-essential git libtool pkg-config
-    - name: Configure and build
-      run: |
-        ./autogen.sh
-        ./configure --prefix=${{ github.workspace }}/install
-        make -j$(nproc)
-        make install
-    - name: Package artifacts
-      run: |
-        cd ${{ github.workspace }}
-        tar -czf libfsrefs-linux-x86_64.tar.gz -C install .
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: libfsrefs-linux-x86_64
-        path: libfsrefs-linux-x86_64.tar.gz
-        retention-days: 30
-
-  build_macos:
-    runs-on: macos-15
-    steps:
-    - uses: actions/checkout@v6
-    - name: Install build dependencies
-      run: |
-        brew update -q
-        brew install -q autoconf automake gettext gnu-sed libtool pkg-config || true
-    - name: Configure and build
-      run: |
-        ./autogen.sh
-        ./configure --prefix=${{ github.workspace }}/install
-        make -j$(sysctl -n hw.ncpu)
-        make install
-    - name: Package artifacts
-      run: |
-        cd ${{ github.workspace }}
-        tar -czf libfsrefs-macos-arm64.tar.gz -C install .
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: libfsrefs-macos-arm64
-        path: libfsrefs-macos-arm64.tar.gz
-        retention-days: 30
-
   build_windows:
     runs-on: windows-2022
     steps:
