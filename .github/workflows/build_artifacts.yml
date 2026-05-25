@@ -1,0 +1,104 @@
+# Build and publish compiled artifacts.
+name: build_artifacts
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build_linux:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install autoconf automake autopoint build-essential git libtool pkg-config
+    - name: Configure and build
+      run: |
+        ./autogen.sh
+        ./configure --prefix=${{ github.workspace }}/install
+        make -j$(nproc)
+        make install
+    - name: Package artifacts
+      run: |
+        cd ${{ github.workspace }}
+        tar -czf libfsrefs-linux-x86_64.tar.gz -C install .
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: libfsrefs-linux-x86_64
+        path: libfsrefs-linux-x86_64.tar.gz
+        retention-days: 30
+
+  build_macos:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install build dependencies
+      run: |
+        brew update -q
+        brew install -q autoconf automake gettext gnu-sed libtool pkg-config || true
+    - name: Configure and build
+      run: |
+        ./autogen.sh
+        ./configure --prefix=${{ github.workspace }}/install
+        make -j$(sysctl -n hw.ncpu)
+        make install
+    - name: Package artifacts
+      run: |
+        cd ${{ github.workspace }}
+        tar -czf libfsrefs-macos-arm64.tar.gz -C install .
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: libfsrefs-macos-arm64
+        path: libfsrefs-macos-arm64.tar.gz
+        retention-days: 30
+
+  build_windows:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v6
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+    - name: Install build dependencies
+      run: |
+        git clone https://github.com/libyal/vstools.git ..\vstools
+    - name: Build from source
+      run: |
+        .\synclibs.ps1 -UseHead
+        .\autogen.ps1
+        .\build.ps1 -VisualStudioVersion 2022 -Configuration Release -Platform x64 -PythonPath ${{ env.pythonLocation }} -VSToolsOptions "--extend-with-x64 --no-python-dll"
+    - name: Collect binaries
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+        Get-ChildItem -Path . -Recurse -Include *.dll,*.exe,*.lib |
+          Where-Object { $_.FullName -match 'Release|x64' } |
+          Copy-Item -Destination artifacts -Force
+        Compress-Archive -Path artifacts\* -DestinationPath libfsrefs-windows-x64.zip -Force
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: libfsrefs-windows-x64
+        path: libfsrefs-windows-x64.zip
+        retention-days: 30
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build_linux, build_macos, build_windows]
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+    - name: Create release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: artifacts/*
+        generate_release_notes: true
