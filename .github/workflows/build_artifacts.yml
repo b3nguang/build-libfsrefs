@@ -1,12 +1,9 @@
-# Build and publish compiled artifacts.
+# Build and publish compiled artifacts (manual trigger only).
 name: build_artifacts
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   build_linux:
     runs-on: ubuntu-24.04
@@ -87,18 +84,3 @@ jobs:
         name: libfsrefs-windows-x64
         path: libfsrefs-windows-x64.zip
         retention-days: 30
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build_linux, build_macos, build_windows]
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-        merge-multiple: true
-    - name: Create release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: artifacts/*
-        generate_release_notes: true
